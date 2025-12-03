@@ -1,15 +1,8 @@
-// src/JwtValidator.ts - Vamos refatorar para melhor testabilidade
+// src/JwtValidator.ts
+import { JwtValidatorOptions, RoleErrorMap } from "./type";
 import type { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload, JwtHeader } from "jsonwebtoken";
 import jwksClient, { SigningKey } from "jwks-rsa";
-
-type RoleErrorMap = Record<string, string>;
-
-export interface JwtValidatorOptions {
-  jwksUri: string;
-  issuer: string;
-  roleErrorMap?: RoleErrorMap;
-}
 
 export class JwtValidator {
   private client;
@@ -24,7 +17,7 @@ export class JwtValidator {
     this.roleErrorMap = options.roleErrorMap ?? {};
   }
 
-  // Expor método público para testes
+  // Exposto para facilitar testes
   public extractToken(req: Request): string | null {
     const auth =
       (req.headers["authorization"] ||
@@ -34,37 +27,46 @@ export class JwtValidator {
     return auth.substring("Bearer ".length);
   }
 
-  // Expor método público para testes
-  public async verifyToken(token: string): Promise<JwtPayload> {
-    return new Promise<JwtPayload>((resolve, reject) => {
-      jwt.verify(
-        token,
-        (header: JwtHeader, callback) => {
-          this.client.getSigningKey(
-            header.kid as string,
-            (err: Error | null, key?: SigningKey) => {
-              if (err) return callback(err);
-              const signingKey = key!.getPublicKey();
-              callback(null, signingKey);
-            }
-          );
-        },
-        {
-          issuer: this.issuer,
-          algorithms: ["RS256"],
-        },
-        (err, decoded) => {
-          if (err || !decoded) {
-            const e: any = err || new Error("TOKEN_INVALID");
-            e.code = "TOKEN_INVALID";
-            return reject(e);
+  // Miolo isolado para poder testar comportamento do jwt.verify + jwks
+  private verifyTokenInternal(
+    token: string,
+    resolve: (value: JwtPayload) => void,
+    reject: (reason?: any) => void
+  ): void {
+    jwt.verify(
+      token,
+      (header: JwtHeader, callback) => {
+        this.client.getSigningKey(
+          header.kid as string,
+          (err: Error | null, key?: SigningKey) => {
+            if (err) return callback(err);
+            const signingKey = key!.getPublicKey();
+            callback(null, signingKey);
           }
-          resolve(decoded as JwtPayload);
+        );
+      },
+      {
+        issuer: this.issuer,
+        algorithms: ["RS256"],
+      },
+      (err, decoded) => {
+        if (err || !decoded) {
+          const e: any = err || new Error("TOKEN_INVALID");
+          e.code = "TOKEN_INVALID";
+          return reject(e);
         }
-      );
-    });
+        resolve(decoded as JwtPayload);
+      }
+    );
   }
 
+  // Expor método público para testes / uso normal
+  public async verifyToken(token: string): Promise<JwtPayload> {
+    return new Promise<JwtPayload>((resolve, reject) => {
+      this.verifyTokenInternal(token, resolve, reject);
+    });
+  }
+  
   validateAudience(expectedAudience: string) {
     return async (req: Request, res: Response, next: NextFunction) => {
       const token = this.extractToken(req);
@@ -103,8 +105,7 @@ export class JwtValidator {
             errorKey: "TOKEN_INVALID",
           });
         }
-        
-        // Erro inesperado
+
         return res.status(500).json({
           status: 500,
           errorKey: "INTERNAL_ERROR",
@@ -156,7 +157,7 @@ export class JwtValidator {
             errorKey: "TOKEN_INVALID",
           });
         }
-        
+
         return res.status(500).json({
           status: 500,
           errorKey: "INTERNAL_ERROR",
