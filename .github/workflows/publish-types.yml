@@ -1,0 +1,146 @@
+name: Publish Shared Frontend Package
+
+on:
+  push:
+    tags:
+      - 'package-v*'
+    paths:
+      - 'package/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (ex: 1.2.3)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  publish-types:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@nstechhub'
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            # remove o prefixo package-v da tag
+            VER="${GITHUB_REF_NAME#package-v}"
+          else
+            VER="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        working-directory: package
+        run: |
+          npm install
+
+      - name: Configure npm for GitHub Packages (.npmrc)
+        working-directory: package
+        run: |
+          cat > .npmrc <<'EOF'
+          @nstechhub:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+          always-auth=true
+          EOF
+
+      - name: Set package version
+        working-directory: package
+        run: |
+          TARGET="${{ steps.ver.outputs.version }}"
+          CURRENT="$(node -p "require('./package.json').version")"
+          echo "Current: $CURRENT | Target: $TARGET"
+          if [ "$CURRENT" = "$TARGET" ]; then
+            echo "Version unchanged. Skipping npm version."
+          else
+            # Atualiza package.json sem criar tag/commit
+            npm version "$TARGET" --no-git-tag-version
+            echo "Version updated to $TARGET"
+          fi
+
+      - name: Build and validate types package
+        working-directory: package
+        run: |
+          echo "🔨 Compilando TypeScript..."
+          npm run build
+          echo "✅ Compilação concluída"
+          
+          # Verificar se os arquivos existem
+          if [ ! -f "index.d.ts" ]; then
+            echo "❌ Arquivo index.d.ts não encontrado"
+            exit 1
+          fi
+          if [ ! -f "index.js" ]; then
+            echo "❌ Arquivo index.js não encontrado"
+            exit 1
+          fi
+          
+          # Verificar se as funções estão exportadas
+          if ! grep -q "export.*loadShared" index.js; then
+            echo "❌ Função loadShared não encontrada"
+            exit 1
+          fi
+          
+          echo "✅ Validação dos tipos e implementações concluída"
+          
+      - name: Publish to GitHub Packages
+        working-directory: package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # publish não interativo (evita prompt)
+          npm publish
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref }}
+          name: Shared Frontend Package v${{ steps.ver.outputs.version }}
+          body: |
+            ## 📦 @nstechhub/shared-frontend v${{ steps.ver.outputs.version }}
+
+            ### 🎯 Uso
+            ```bash
+            npm install @nstechhub/shared-frontend
+            yarn add @nstechhub/shared-frontend
+            pnpm add @nstechhub/shared-frontend
+            ```
+
+            ### 📝 Exemplo
+            ```typescript
+            import type { Config, Shared } from '@nstechhub/shared-frontend';
+            import { loadShared } from '@nstechhub/shared-frontend';
+            
+            const initShared = await loadShared('https://sharedfront.nstech.com.br');
+            const shared = await initShared();
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create/Update 'latest' tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -d latest 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+          git tag latest
+          git push origin latest
+          echo "✅ Tag 'latest' -> v${{ steps.ver.outputs.version }}"
