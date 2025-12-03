@@ -1,4 +1,4 @@
-name: Publish Shared Frontend Package
+name: Publish Shared Package
 
 on:
   push:
