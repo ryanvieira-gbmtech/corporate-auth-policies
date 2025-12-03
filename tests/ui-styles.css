@@ -1,0 +1,185 @@
+/* tests/ui-styles.css */
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Chart animations */
+.chart-wrapper {
+    animation: fadeIn 0.6s ease-out;
+}
+
+.module-item {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.stat-card {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.stat-card:nth-child(1) { animation-delay: 0.1s; }
+.stat-card:nth-child(2) { animation-delay: 0.2s; }
+.stat-card:nth-child(3) { animation-delay: 0.3s; }
+.stat-card:nth-child(4) { animation-delay: 0.4s; }
+
+/* Hover effects */
+.btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.5);
+    opacity: 0;
+    border-radius: 100%;
+    transform: scale(1, 1) translate(-50%);
+    transform-origin: 50% 50%;
+}
+
+.btn:focus:not(:active)::after {
+    animation: ripple 1s ease-out;
+}
+
+@keyframes ripple {
+    0% {
+        transform: scale(0, 0);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(20, 20);
+        opacity: 0;
+    }
+}
+
+/* Progress bar for coverage */
+.coverage-progress {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.coverage-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+/* Tooltips */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+[data-tooltip]:hover::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
+    margin-bottom: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .chart-wrapper {
+        width: 150px;
+        height: 150px;
+    }
+    
+    .chart-percentage {
+        font-size: 1.5rem;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    html {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    }
+    
+    .card, .stat-card, .footer {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+    }
+    
+    .card h2, .stat-number {
+        color: #f1f5f9;
+    }
+    
+    .stat-label {
+        color: #94a3b8;
+    }
+    
+    .module-item {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    
+    .module-item:hover {
+        background: #1e293b;
+        border-color: #475569;
+    }
+    
+    .module-info h3 {
+        color: #f1f5f9;
+    }
+    
+    .module-info p {
+        color: #94a3b8;
+    }
+    
+    .btn-secondary {
+        background: #334155;
+        color: #cbd5e1;
+        border-color: #475569;
+    }
+    
+    .btn-secondary:hover {
+        background: #475569;
+    }
+}

@@ -1,0 +1,97 @@
+# -------------------------
+# Node / NPM / Yarn
+# -------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+
+# -------------------------
+# Build e artefatos
+# -------------------------
+dist/
+build/
+coverage/
+.tmp/
+temp/
+.cache/
+.esbuild/
+parcel-cache/
+
+# -------------------------
+# TypeScript
+# -------------------------
+*.tsbuildinfo
+*.tsbuildinfo.*
+
+# -------------------------
+# Ambiente / Variáveis
+# -------------------------
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Nunca suba secrets, PAT, tokens ou configs de auth
+*.pem
+*.key
+*.crt
+*.pfx
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+Debug/
+debug.log
+
+# -------------------------
+# IDE / Editor
+# -------------------------
+.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.iml
+
+# -------------------------
+# Sistema Operacional
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Testes
+# -------------------------
+coverage/
+.nyc_output/
+test_output/
+
+# -------------------------
+# GitHub Actions
+# -------------------------
+# Nada aqui, mas se surgir cache, ignore:
+actions-runner/
+_runner/
+
+# -------------------------
+# Pacotes / Arquivos gerados
+# -------------------------
+*.tgz
+
+# -------------------------
+# Lint
+# -------------------------
+eslintcache
+
+.npmrc
+.yarnrc
+
