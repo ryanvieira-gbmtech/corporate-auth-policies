@@ -1,6 +1,6 @@
 {
   "name": "@nstechhub/corporate-auth-policies",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Políticas corporativas de autenticação JWT + Keycloak com Problem Details e ErrorCode padrão NSTech",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
