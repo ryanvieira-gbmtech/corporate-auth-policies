@@ -1,20 +1,19 @@
-// src/JwtValidator.ts
-
-import type { NextFunction, Request, Response } from "express";
-import jwt, { type JwtHeader, type JwtPayload } from "jsonwebtoken";
-import jwksClient, { type JwksClient, type SigningKey } from "jwks-rsa";
+import jwt, { type JwtHeader } from "jsonwebtoken";
+import jwksClient, { type JwksClient } from "jwks-rsa";
 import { defaultErrorCatalog } from "./ProblemDetails";
-import type {
-	JwtValidatorOptions,
-	KeycloakJwtPayload,
-	RoleErrorMap,
-} from "./type";
+import type { JwtValidatorOptions, KeycloakJwtPayload } from "./type";
 
 export class JwtValidator {
 	private client: JwksClient;
 	private issuer: string;
-	private roleErrorMap: RoleErrorMap;
 
+	/**
+	 * Cria uma instância do validador buscando a configuração OpenID para descobrir o `jwks_uri` correto.
+	 * Use este factory em vez do construtor direto, pois o construtor é privado.
+	 * @param options Configuração básica (jwksUri do realm, issuer esperado, roleErrorMap opcional)
+	 * @returns Instância pronta para validar tokens
+	 * @throws Error quando a configuração OpenID não pode ser obtida ou não contém `jwks_uri`
+	 */
 	static async create(options: JwtValidatorOptions): Promise<JwtValidator> {
 		const configUrl = new URL(options.jwksUri);
 		if (!configUrl.pathname.endsWith("/")) {
@@ -46,10 +45,13 @@ export class JwtValidator {
 			jwksUri: options.jwksUri,
 		});
 		this.issuer = options.issuer;
-		this.roleErrorMap = options.roleErrorMap ?? {};
 	}
 
-	// Exposto para facilitar testes
+	/**
+	 * Extrai o token bruto do header Authorization (formato "Bearer <token>").
+	 * @param token Valor do header Authorization
+	 * @returns token sem o prefixo ou null quando ausente/inválido
+	 */
 	private extractToken(token: string): string | null {
 		if (!token.startsWith("Bearer ")) {
 			return null;
@@ -58,6 +60,12 @@ export class JwtValidator {
 		return token.replace("Bearer ", "").trim();
 	}
 
+	/**
+	 * Verifica a assinatura e o issuer do JWT usando JWKS remoto.
+	 * @param token Token JWT (string) já extraído
+	 * @returns Payload decodificado tipado como KeycloakJwtPayload
+	 * @throws Erro com `code=TOKEN_INVALID` quando assinatura ou payload são inválidos
+	 */
 	private verifyToken(token: string): Promise<KeycloakJwtPayload> {
 		return new Promise((resolve, reject) => {
 			jwt.verify(
@@ -77,12 +85,17 @@ export class JwtValidator {
 						e.code = "TOKEN_INVALID";
 						return reject(e);
 					}
-					resolve(decoded as JwtPayload);
+					resolve(decoded as KeycloakJwtPayload);
 				},
 			);
 		});
 	}
 
+	/**
+	 * Valida audience do token e retorna objeto de sucesso/erro pronto para consumo em APIs.
+	 * @param token Header Authorization recebido (Bearer ...)
+	 * @param expectedAudience Audience esperada
+	 */
 	async validateAudience(token: string, expectedAudience: string) {
 		const realToken = this.extractToken(token);
 		if (!realToken) {
@@ -133,6 +146,12 @@ export class JwtValidator {
 		}
 	}
 
+	/**
+	 * Valida se o token possui a role exigida para um clientId específico.
+	 * @param token Header Authorization recebido (Bearer ...)
+	 * @param clientId ClientId do recurso no Keycloak
+	 * @param requiredRole Role obrigatória
+	 */
 	async validateRole(token: string, clientId: string, requiredRole: string) {
 		const realToken = this.extractToken(token);
 		if (!realToken) {
