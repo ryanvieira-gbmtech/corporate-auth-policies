@@ -2,24 +2,19 @@
 	"name": "@nstechhub/corporate-auth-policies",
 	"version": "0.2.0",
 	"description": "Políticas corporativas de autenticação JWT + Keycloak com Problem Details e ErrorCode padrão NSTech",
-	"main": "dist/index.cjs",
-	"module": "dist/index.mjs",
+	"main": "dist/index.js",
+	"exports": {
+		".": {
+			"require": "./dist/index.js",
+			"import": "./dist/index.js"
+		},
+		"./package.json": "./package.json"
+	},
 	"types": "dist/index.d.ts",
 	"scripts": {
 		"build": "tsc",
 		"test": "vitest run --coverage",
 		"test:watch": "vitest",
-		"test:ui": "vitest --ui",
-		"test:ui-open": "vitest --ui --open",
-		"dashboard": "node scripts/start-dashboard.js",
-		"dashboard:dev": "nodemon scripts/start-dashboard.js",
-		"test:coverage": "vitest run --coverage",
-		"test:basic": "vitest run tests/JwtValidator.basic.spec.ts",
-		"test:audience": "vitest run tests/JwtValidator.audience.spec.ts",
-		"test:role": "vitest run tests/JwtValidator.role.spec.ts",
-		"test:problem-details": "vitest run tests/ProblemDetails.spec.ts",
-		"test:types": "vitest run tests/types.spec.ts",
-		"test:integration": "vitest run tests/integration.spec.ts",
 		"type-check": "tsc --noEmit"
 	},
 	"repository": {
