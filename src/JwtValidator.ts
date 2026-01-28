@@ -3,6 +3,7 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt, { type JwtHeader, type JwtPayload } from "jsonwebtoken";
 import jwksClient, { type JwksClient, type SigningKey } from "jwks-rsa";
+import { defaultErrorCatalog } from "./ProblemDetails";
 import type { JwtValidatorOptions, RoleErrorMap } from "./type";
 
 export class JwtValidator {
@@ -45,104 +46,88 @@ export class JwtValidator {
 	}
 
 	// Exposto para facilitar testes
-	private extractToken(req: Request): string | null {
-		const authHeader =
-			req.headers?.authorization || (req.headers as any)?.Authorization;
-		if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+	private extractToken(token: string): string | null {
+		if (!token.startsWith("Bearer ")) {
 			return null;
 		}
-		return authHeader.substring("Bearer ".length);
+
+		return token.replace("Bearer ", "").trim();
 	}
 
 	// Miolo isolado para poder testar comportamento do jwt.verify + jwks
-	private verifyTokenInternal(
-		token: string,
-		resolve: (value: JwtPayload) => void,
-		reject: (reason?: any) => void,
-	): void {
-		jwt.verify(
-			token,
-			(header: JwtHeader, callback) => {
-				if (!header.kid) {
-					return callback(new Error("KID_MISSING"));
-				}
-				this.client.getSigningKey(
-					header.kid as string,
-					(err: Error | null, key?: SigningKey) => {
-						if (err) return callback(err);
-						if (!key) return callback(new Error("SIGNING_KEY_NOT_FOUND"));
-						const signingKey = key.getPublicKey();
-						callback(null, signingKey);
-					},
-				);
-			},
-			{
-				issuer: this.issuer,
-				algorithms: ["RS256"],
-			},
-			(err, decoded) => {
-				if (err || !decoded) {
-					const e: any = err || new Error("TOKEN_INVALID");
-					e.code = "TOKEN_INVALID";
-					return reject(e);
-				}
-				resolve(decoded as JwtPayload);
-			},
-		);
-	}
-
-	// Expor método público para testes / uso normal
-	public async verifyToken(token: string): Promise<JwtPayload> {
-		return new Promise<JwtPayload>((resolve, reject) => {
-			this.verifyTokenInternal(token, resolve, reject);
+	private verifyTokenInternal(token: string): Promise<JwtPayload> {
+		return new Promise((resolve, reject) => {
+			jwt.verify(
+				token,
+				(header: JwtHeader, cb) => {
+					if (!header.kid) return cb(new Error("TOKEN_INVALID"));
+					this.client.getSigningKey(header.kid as string, (err, key) => {
+						if (err) return cb(err);
+						if (!key) return cb(new Error("TOKEN_INVALID"));
+						cb(null, key.getPublicKey());
+					});
+				},
+				{ issuer: this.issuer, algorithms: ["RS256"] },
+				(err, decoded) => {
+					if (err || !decoded) {
+						const e: any = err || new Error("TOKEN_INVALID");
+						e.code = "TOKEN_INVALID";
+						return reject(e);
+					}
+					resolve(decoded as JwtPayload);
+				},
+			);
 		});
 	}
 
-	validateAudience(expectedAudience: string) {
-		return async (req: Request, res: Response, next: NextFunction) => {
-			const token = this.extractToken(req);
+	async validateAudience(token: string, expectedAudience: string) {
+		const realToken = this.extractToken(token);
+		if (!realToken) {
+			return {
+				success: false,
+				error: {
+					...defaultErrorCatalog.TOKEN_NOT_PROVIDED,
+				},
+			};
+		}
 
-			if (!token) {
-				return res.status(401).json({
-					status: 401,
-					errorKey: "TOKEN_NOT_PROVIDED",
-				});
-			}
+		try {
+			const decoded = await this.verifyTokenInternal(token);
 
-			try {
-				const decoded = await this.verifyToken(token);
+			const aud = Array.isArray(decoded.aud) ? decoded.aud[0] : decoded.aud;
 
-				const aud = decoded.aud;
-				const audStr = Array.isArray(aud) ? aud[0] : aud;
-
-				if (!audStr || audStr !== expectedAudience) {
-					return res.status(403).json({
-						status: 403,
-						errorKey: "AUDIENCE_INVALID",
-						detail: `Expected audience '${expectedAudience}', got '${audStr ?? "undefined"}'`,
-					});
-				}
-
-				(req as any).user = {
-					...(req as any).user,
-					id: decoded.sub,
+			if (!aud || aud !== expectedAudience) {
+				return {
+					success: false,
+					error: {
+						...defaultErrorCatalog.AUDIENCE_INVALID,
+					},
 				};
-
-				return next();
-			} catch (err: any) {
-				if (err.code === "TOKEN_INVALID") {
-					return res.status(403).json({
-						status: 403,
-						errorKey: "TOKEN_INVALID",
-					});
-				}
-
-				return res.status(500).json({
-					status: 500,
-					errorKey: "INTERNAL_ERROR",
-				});
 			}
-		};
+
+			return {
+				success: true,
+				message: "Token is valid",
+			};
+		} catch (error: unknown) {
+			const err = error as any;
+
+			if (err.code === "TOKEN_INVALID") {
+				return {
+					success: false,
+					error: {
+						...defaultErrorCatalog.TOKEN_INVALID,
+					},
+				};
+			}
+
+			return {
+				success: false,
+				error: {
+					...defaultErrorCatalog.INTERNAL_ERROR,
+				},
+			};
+		}
 	}
 
 	validateRole(clientId: string, requiredRole: string) {
