@@ -1,14 +1,23 @@
 import jwt, { type JwtHeader, type JwtPayload } from "jsonwebtoken";
 import jwksClient, { type JwksClient } from "jwks-rsa";
 
+/**
+ * Mapa de roles por clientId retornado pelo Keycloak.
+ */
 export interface KeycloakResourceAccess {
 	[clientId: string]: { roles: string[] };
 }
 
+/**
+ * Payload JWT esperado do Keycloak, com `resource_access` opcional.
+ */
 export interface KeycloakJwtPayload extends JwtPayload {
 	resource_access?: KeycloakResourceAccess;
 }
 
+/**
+ * Opções de configuração para instanciar o validador JWT.
+ */
 export interface JwtValidatorOptions {
 	jwksUri: string; // URL do JWKS do Keycloak
 	issuer: string; // Issuer esperado (realm)
@@ -32,8 +41,14 @@ export interface ErrorCatalogEntry {
 	externalCode?: string;
 }
 
+/**
+ * Catálogo estruturado de erros para mapear respostas padronizadas.
+ */
 export type ErrorCatalog = Record<ErrorKey, ErrorCatalogEntry>;
 
+/**
+ * Catálogo padrão de erros retornados pelas validações.
+ */
 export const defaultErrorCatalog: ErrorCatalog = {
 	TOKEN_NOT_PROVIDED: {
 		httpStatus: 401,
@@ -171,6 +186,7 @@ export class JwtValidator {
 	 * Valida audience do token e retorna objeto de sucesso/erro pronto para consumo em APIs.
 	 * @param token Header Authorization recebido (Bearer ...)
 	 * @param expectedAudience Audience esperada
+	 * @returns Objeto com success e detalhes do erro quando aplicável
 	 */
 	async validateAudience(token: string, expectedAudience: string) {
 		const realToken = this.extractToken(token);
@@ -227,6 +243,7 @@ export class JwtValidator {
 	 * @param token Header Authorization recebido (Bearer ...)
 	 * @param clientId ClientId do recurso no Keycloak
 	 * @param requiredRole Role obrigatória
+	 * @returns Objeto com success e detalhes do erro quando aplicável
 	 */
 	async validateRole(token: string, clientId: string, requiredRole: string) {
 		const realToken = this.extractToken(token);
