@@ -12,7 +12,9 @@ Unificar, padronizar e tornar minimamente civilizado o tratamento de autenticaç
 
 * Validação de JWT assinado com RS256.
 * Resolução automática de chaves públicas via JWKS.
-* Middlewares Express para validar audiences e roles.
+* Validação de JWT assinado com RS256.
+* Resolução automática de chaves públicas via JWKS (descobertas pelo endpoint OpenID).
+* Funções de validação de audience e roles que retornam objetos padronizados (não mais middlewares Express).
 * Respostas sempre em formato Problem Details.
 * Catálogo interno de erros (ErrorKey).
 * Catálogo externo de códigos, via `errorCode`, conforme o padrão corporativo.
@@ -117,33 +119,28 @@ Você pode sobrescrever tudo via catálogo customizado.
 ## 5. Exemplo rápido
 
 ```ts
-import express from "express";
 import { JwtValidator } from "@nstech/corporate-auth-policies";
 
-const app = express();
-
-const auth = new JwtValidator({
-  jwksUri: "https://keycloak.local/realms/master/protocol/openid-connect/certs",
-  issuer: "https://keycloak.local/realms/master",
-  roleErrorMap: {
-    "hub-agendamentos:admin": "HUB_FORBIDDEN_0007"
-  }
+// Sempre use o factory async (o construtor é privado)
+const auth = await JwtValidator.create({
+  jwksUri: "https://keycloak.local/realms/master", // base do realm; o .well-known é resolvido automaticamente
+  issuer: "https://keycloak.local/realms/master"
 });
 
-app.get("/health", (_, res) => res.json({ ok: true }));
+// Audience
+const audienceResult = await auth.validateAudience("Bearer eyJ...", "hub-agendamentos");
+if (!audienceResult.success) {
+  console.log(audienceResult.error); // Problem Details pronto
+}
 
-app.get("/secure",
-  auth.validateAudience("hub-agendamentos"),
-  (req, res) => res.json({ message: "Access granted", user: req.user })
-);
-
-app.get("/secure/admin",
-  auth.validateRole("hub-agendamentos", "admin"),
-  (req, res) => res.json({ message: "Admin OK" })
-);
-
-app.listen(3000);
+// Role por clientId
+const roleResult = await auth.validateRole("Bearer eyJ...", "hub-agendamentos", "admin");
+if (!roleResult.success) {
+  console.log(roleResult.error);
+}
 ```
+
+> Se quiser encaixar em Express, basta chamar as funções dentro do handler e montar a resposta HTTP com o objeto retornado.
 
 ---
 
@@ -192,44 +189,22 @@ app.listen(3000);
 ## 7. Configurações disponíveis
 
 ```ts
-new JwtValidator({
-  jwksUri: string,                 // obrigatório
-  issuer?: string,                 // recomendado
-  algorithms?: ["RS256"],          // default
-  errorCatalog?: {...},            // substitui catálogo interno
-  roleErrorMap?: {...}             // de/para externo para roles
+await JwtValidator.create({
+  jwksUri: string,       // obrigatório. Base do realm; o .well-known é resolvido automaticamente
+  issuer: string,        // obrigatório. Valor esperado em `iss`
+  audience?: string      // opcional, se quiser audience padrão
 });
 ```
 
-### 7.1 roleErrorMap
-
-Mapa simples:
-
-```
-"<audience>:<role>" → "<errorCode>"
-```
-
-Exemplo:
-
-```
-"conta-digital:financeiro": "CD_FORBIDDEN_0101"
-```
-
-Se quiser mapear 100 roles diferentes, bom… força.
-
 ---
 
-## 8. Middlewares
+## 8. APIs de validação
 
-### 8.1 `validateAudience(audience: string)`
+### 8.1 `validateAudience(token: string, expectedAudience: string)`
+Retorna `{ success: boolean, error?: ProblemDetailsLike, message?: string }`. Quando `success` é falso, o `error` já está no formato do catálogo padrão.
 
-Garante que o token contém a audience especificada.
-
-### 8.2 `validateRole(audience: string, role: string)`
-
-Garante que o usuário possui a role do client (`resource_access[audience].roles`).
-
-Sim: funciona com Keycloak, com roles herdadas, diretas e com aplicações multi-tenant.
+### 8.2 `validateRole(token: string, clientId: string, requiredRole: string)`
+Valida roles em `resource_access[clientId].roles` e retorna o mesmo contrato de sucesso/erro.
 
 ---
 
@@ -263,7 +238,7 @@ Essa stack possui testes unitários, e possui uma cobertura boa de forma que ess
 
 * Sempre confira se você está usando o **client correto** na audience.
 * Roles vivem em `resource_access[audience].roles`.
-* Roles realm-wide ficam em `realm_access.roles`, mas este pacote foca em client roles.
+* Roles realm-wide ficam em `realm_access.roles`, mas este pacote foca em client roles (`resource_access`).
 * Se você não sabe qual role usar… provavelmente ninguém sabe. Boa sorte.
 
 ---
