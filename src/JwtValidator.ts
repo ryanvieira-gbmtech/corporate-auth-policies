@@ -4,7 +4,11 @@ import type { NextFunction, Request, Response } from "express";
 import jwt, { type JwtHeader, type JwtPayload } from "jsonwebtoken";
 import jwksClient, { type JwksClient, type SigningKey } from "jwks-rsa";
 import { defaultErrorCatalog } from "./ProblemDetails";
-import type { JwtValidatorOptions, RoleErrorMap } from "./type";
+import type {
+	JwtValidatorOptions,
+	KeycloakJwtPayload,
+	RoleErrorMap,
+} from "./type";
 
 export class JwtValidator {
 	private client: JwksClient;
@@ -54,8 +58,7 @@ export class JwtValidator {
 		return token.replace("Bearer ", "").trim();
 	}
 
-	// Miolo isolado para poder testar comportamento do jwt.verify + jwks
-	private verifyTokenInternal(token: string): Promise<JwtPayload> {
+	private verifyToken(token: string): Promise<KeycloakJwtPayload> {
 		return new Promise((resolve, reject) => {
 			jwt.verify(
 				token,
@@ -92,7 +95,7 @@ export class JwtValidator {
 		}
 
 		try {
-			const decoded = await this.verifyTokenInternal(token);
+			const decoded = await this.verifyToken(token);
 
 			const aud = Array.isArray(decoded.aud) ? decoded.aud[0] : decoded.aud;
 
@@ -130,55 +133,55 @@ export class JwtValidator {
 		}
 	}
 
-	validateRole(clientId: string, requiredRole: string) {
-		return async (req: Request, res: Response, next: NextFunction) => {
-			const token = this.extractToken(req);
+	async validateRole(token: string, clientId: string, requiredRole: string) {
+		const realToken = this.extractToken(token);
+		if (!realToken) {
+			return {
+				success: false,
+				error: {
+					...defaultErrorCatalog.TOKEN_NOT_PROVIDED,
+				},
+			};
+		}
 
-			if (!token) {
-				return res.status(401).json({
-					status: 401,
-					errorKey: "TOKEN_NOT_PROVIDED",
-				});
-			}
+		try {
+			const decoded = await this.verifyToken(token);
 
-			try {
-				const decoded = await this.verifyToken(token);
+			const resourceAccess = decoded.resource_access || {};
+			const client = resourceAccess[clientId] || {};
+			const roles: string[] = client.roles || [];
 
-				const resourceAccess = (decoded as any).resource_access ?? {};
-				const client = resourceAccess[clientId] ?? {};
-				const roles: string[] = client.roles ?? [];
-
-				if (!roles.includes(requiredRole)) {
-					const key = `${clientId}:${requiredRole}`;
-					const errorCode = this.roleErrorMap[key];
-
-					return res.status(403).json({
-						status: 403,
-						errorKey: "ROLE_INSUFFICIENT",
-						errorCode,
-					});
-				}
-
-				(req as any).user = {
-					...(req as any).user,
-					id: decoded.sub,
-					roles,
+			if (!roles.includes(requiredRole)) {
+				return {
+					success: false,
+					error: {
+						...defaultErrorCatalog.ROLE_INSUFFICIENT,
+					},
 				};
-
-				return next();
-			} catch (err: any) {
-				if (err.code === "TOKEN_INVALID") {
-					return res.status(403).json({
-						status: 403,
-						errorKey: "TOKEN_INVALID",
-					});
-				}
-
-				return res.status(500).json({
-					status: 500,
-					errorKey: "INTERNAL_ERROR",
-				});
 			}
-		};
+
+			return {
+				success: true,
+				message: "Role is valid",
+			};
+		} catch (error) {
+			const err = error as any;
+
+			if (err.code === "TOKEN_INVALID") {
+				return {
+					success: false,
+					error: {
+						...defaultErrorCatalog.TOKEN_INVALID,
+					},
+				};
+			}
+
+			return {
+				success: false,
+				error: {
+					...defaultErrorCatalog.INTERNAL_ERROR,
+				},
+			};
+		}
 	}
 }
