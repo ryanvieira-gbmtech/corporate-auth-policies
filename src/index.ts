@@ -94,7 +94,7 @@ export const defaultErrorCatalog: ErrorCatalog = {
 	},
 };
 
-export class JwtValidator {
+export default class JwtValidator {
 	private client: JwksClient;
 	private issuer: string;
 
